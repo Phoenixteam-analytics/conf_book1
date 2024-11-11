@@ -1,91 +1,134 @@
+# Import necessary libraries
 import streamlit as st
-import sqlite3
 import pandas as pd
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
+import os
 
-st.image("https://phoenixteam.com/wp-content/uploads/2024/02/Phoenix-Logo.png",width=15,use_column_width="always")
+# Set up page configuration
+st.set_page_config(page_title="Conference Room Booking", layout="centered")
 
-st.title("Conference Booking :calendar:")
-# Database connection function
+# Define CSV file for persistent storage
+BOOKINGS_FILE = "conference_bookings.csv"
 
-#st.title("Time Slot Booking App with In-Memory Storage")
-
-# Initialize an empty list to hold booking data
-if 'bookings' not in st.session_state:
-    st.session_state['bookings'] = []
-
-# Function to add a booking
-def add_booking(name, date, start_time, end_time, booking_type):
-    st.session_state['bookings'].append({
-        "Name": name,
-        "Date": date,
-        "Start Time": start_time,
-        "End Time": end_time,
-        "Booking Type": booking_type
-    })
-st.image("https://fylfotservices.com/wp-content/uploads/2023/07/Untitled-design.jpg")
-
-# Check for overlapping bookings
-def is_time_slot_available(date, new_start, new_end):
-    new_start = datetime.strptime(new_start, "%H:%M")
-    new_end = datetime.strptime(new_end, "%H:%M")
-
-    for booking in st.session_state['bookings']:
-        if booking["Date"] == date:
-            booked_start = datetime.strptime(booking["Start Time"], "%H:%M")
-            booked_end = datetime.strptime(booking["End Time"], "%H:%M")
-            # Check for overlap
-            if (new_start < booked_end) and (new_end > booked_start):
-                return False
-    return True
-    
-
-# Define default time range
-default_start_time = time(9, 0)
-default_end_time = time(17, 0)
-
-# Select a date for the booking
-selected_date = st.date_input("Select a date")
-date_str = selected_date.strftime("%Y-%m-%d")
-
-# Display current bookings for the selected date in a table
-st.subheader("Current Bookings")
-current_bookings = [
-    booking for booking in st.session_state['bookings'] if booking["Date"] == date_str
-]
-if current_bookings:
-    df = pd.DataFrame(current_bookings)
-    st.dataframe(df)
+# Load existing bookings from CSV file (or create it if it doesn’t exist)
+if os.path.exists(BOOKINGS_FILE):
+    bookings_df = pd.read_csv(BOOKINGS_FILE, parse_dates=['Date', 'Start', 'End'])
 else:
-    st.write("No bookings for this date")
+    # Create an empty DataFrame with necessary columns
+    bookings_df = pd.DataFrame(columns=["User", "Date", "Room", "Priority", "Description", "Start", "End"])
+    bookings_df.to_csv(BOOKINGS_FILE, index=False)
 
-st.image("https://bdk-wp-media.s3.amazonaws.com/wp-content/uploads/2020/01/13165647/About-icon.gif",use_column_width="always")
-# Time range selection (from and to)
-st.subheader("Book a Time Slot")
-name = st.text_input("Enter your name and Department (example: suhana-analytics)")
-booking_type = st.selectbox("Select Booking Type", ["Big conference room", "Discussion room1", "Discussion room2"])
-start_time = st.time_input("Select start time", default_start_time)
-end_time = st.time_input("Select end time", (datetime.combine(datetime.today(), start_time) + timedelta(hours=1)).time())
+# Function to save bookings to CSV
+def save_bookings(df):
+    df.to_csv(BOOKINGS_FILE, index=False)
 
-# Ensure end time is after start time
-if end_time <= start_time:
-    st.error("End time must be after start time")
-elif not name:
-    st.error("Please enter your name")
-else:
-    # Book slot and check for availability
-    start_time_str = start_time.strftime("%H:%M")
-    end_time_str = end_time.strftime("%H:%M")
-    
-    if st.button("Book Slot"):
-        # Check if the selected time slot is available
-        if is_time_slot_available(date_str, start_time_str, end_time_str):
-            add_booking(name, date_str, start_time_str, end_time_str, booking_type)
-            st.success(f"Booked {start_time_str} - {end_time_str} for {name} as a {booking_type} on {selected_date.strftime('%Y-%m-%d')}")
-        else:
-            st.error(f"Time slot {start_time_str} - {end_time_str} on {selected_date.strftime('%Y-%m-%d')} is already booked.")
+# Title and description
+st.title("Conference Room Booking App")
+st.write("Select a date, room, priority level, and your preferred start and end times. You can also provide a description for your booking.")
 
-# Display all bookings in a DataFrame for a complete view
-st.subheader("All Bookings")
-all_bookings_df = pd.DataFrame(st.session_state['bookings'])
-st.dataframe(all_bookings_df)
+# Step 1: Date selection
+selected_date = st.date_input("Select Booking Date", min_value=datetime.today().date())
+
+# Step 2: Display room, priority, and time selection only if a date is chosen
+if selected_date:
+    st.write("Now, select an available room, priority level, and specify your preferred times.")
+
+    # Room selection
+    room = st.selectbox("Select Room", ["Room A", "Room B", "Room C"])
+
+    # Priority selection
+    priority = st.selectbox("Select Priority Level", ["Low", "Medium-Low", "Medium", "Medium-High", "High"])
+
+    # Time selection only appears if a room is selected
+    if room:
+        # Booking time selection form
+        with st.form("booking_form"):
+            # Start and end time selection
+            selected_start_time = st.time_input("Select Start Time", value=datetime.now().time())
+            selected_end_time = st.time_input("Select End Time", value=(datetime.now() + timedelta(hours=1)).time())
+
+            # Combine date and time into datetime objects for start and end
+            start_datetime = datetime.combine(selected_date, selected_start_time)
+            end_datetime = datetime.combine(selected_date, selected_end_time)
+
+            # User name input
+            user_name = st.text_input("Enter Your Name")
+
+            # Description text input
+            description = st.text_area("Booking Description (optional)")
+
+            # Submit button within the form
+            submit = st.form_submit_button("Book Room")
+
+            # Handle booking submission
+            if submit and user_name:
+                # Check for conflicts
+                conflict = False
+                for _, row in bookings_df[(bookings_df['Date'] == pd.Timestamp(selected_date)) & (bookings_df['Room'] == room)].iterrows():
+                    existing_start = row['Start']
+                    existing_end = row['End']
+                    if (start_datetime < existing_end) and (end_datetime > existing_start):
+                        conflict = True
+                        break
+                
+                if conflict:
+                    st.error("This time slot is already booked. Please select a different time.")
+                else:
+                    # Add new booking to DataFrame
+                    new_booking = pd.DataFrame({
+                        "User": [user_name],
+                        "Date": [selected_date],
+                        "Room": [room],
+                        "Priority": [priority],
+                        "Description": [description],
+                        "Start": [start_datetime],
+                        "End": [end_datetime]
+                    })
+                    bookings_df = pd.concat([bookings_df, new_booking], ignore_index=True)
+
+                    # Save updated bookings to CSV
+                    save_bookings(bookings_df)
+                    st.success(f"Room {room} successfully booked from {start_datetime.strftime('%Y-%m-%d %H:%M')} to {end_datetime.strftime('%Y-%m-%d %H:%M')}.")
+
+# Step 3: Display user-specific booking records with option to update or delete
+st.write("### Your Bookings")
+
+if 'user_name' in locals() and user_name:
+    user_bookings = bookings_df[bookings_df["User"] == user_name]
+    if not user_bookings.empty:
+        # Display user's bookings in a table
+        st.write(user_bookings)
+
+        # Update or delete booking
+        with st.expander("Update or Delete Bookings"):
+            booking_to_modify = st.selectbox("Select Booking to Modify", user_bookings.index)
+
+            if booking_to_modify is not None:
+                selected_booking = user_bookings.loc[booking_to_modify]
+                
+                # Update room, priority, description, and start/end times
+                updated_room = st.selectbox("Update Room", ["Room A", "Room B", "Room C"], index=["Room A", "Room B", "Room C"].index(selected_booking['Room']))
+                updated_priority = st.selectbox("Update Priority Level", ["Low", "Medium-Low", "Medium", "Medium-High", "High"], index=["Low", "Medium-Low", "Medium", "Medium-High", "High"].index(selected_booking['Priority']))
+                updated_description = st.text_area("Update Description", value=selected_booking['Description'])
+                updated_start_time = st.time_input("Update Start Time", value=selected_booking['Start'].time())
+                updated_end_time = st.time_input("Update End Time", value=selected_booking['End'].time())
+
+                updated_start_datetime = datetime.combine(selected_date, updated_start_time)
+                updated_end_datetime = datetime.combine(selected_date, updated_end_time)
+
+                # Buttons to update or delete the booking
+                if st.button("Update Booking"):
+                    bookings_df.loc[booking_to_modify, 'Room'] = updated_room
+                    bookings_df.loc[booking_to_modify, 'Priority'] = updated_priority
+                    bookings_df.loc[booking_to_modify, 'Description'] = updated_description
+                    bookings_df.loc[booking_to_modify, 'Start'] = updated_start_datetime
+                    bookings_df.loc[booking_to_modify, 'End'] = updated_end_datetime
+                    save_bookings(bookings_df)
+                    st.success("Booking updated successfully.")
+                
+                if st.button("Delete Booking"):
+                    bookings_df = bookings_df.drop(booking_to_modify)
+                    save_bookings(bookings_df)
+                    st.success("Booking deleted successfully.")
+    else:
+        st.write("No bookings found.")
