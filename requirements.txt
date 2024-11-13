@@ -1,5 +1,5 @@
 #requirements.txt
-snowflake-snowpark-python ==0.7.0
+snowflake-snowpark-python
 streamlit
 datetime
 pandas
