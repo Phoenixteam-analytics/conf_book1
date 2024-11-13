@@ -1,4 +1,6 @@
 #requirements.txt
 snowflake-snowpark-python
 streamlit
+datetime, timedelta
+pandas
 requests
